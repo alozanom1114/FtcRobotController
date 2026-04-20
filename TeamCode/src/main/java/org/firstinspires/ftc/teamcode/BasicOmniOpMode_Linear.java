@@ -33,7 +33,16 @@ import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
+
+import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
+import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit;
+
+import java.util.Locale;
 
 /*
  * This file contains an example of a Linear "OpMode".
@@ -74,6 +83,21 @@ public class BasicOmniOpMode_Linear extends LinearOpMode {
     private DcMotor frontRightDrive = null;
     private DcMotor backRightDrive = null;
 
+    GoBildaPinpointDriver odo;
+    double oldTime = 0;
+
+    private boolean yButtonPreviouslyPressed;
+    private boolean flywheelOn;
+    private DcMotorEx flyWheel;
+    private double BANG_BANG_TARGET_VELOCITY;
+
+    private double angleValue = 0.85; //0.85-0.01 (bottom-top)
+    private double additionalAngle = 0.00; //player 1/2 controlled angle
+
+    private Servo angle;
+
+    private double turretTargetTicks;
+
     @Override
     public void runOpMode() {
 
@@ -99,15 +123,54 @@ public class BasicOmniOpMode_Linear extends LinearOpMode {
         frontRightDrive.setDirection(DcMotor.Direction.FORWARD);
         backRightDrive.setDirection(DcMotor.Direction.FORWARD);
 
+        odo = hardwareMap.get(GoBildaPinpointDriver.class,"odo");
+        odo.setOffsets(5.5, -137, DistanceUnit.MM);
+        odo.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
+        odo.setEncoderDirections(GoBildaPinpointDriver.EncoderDirection.FORWARD, GoBildaPinpointDriver.EncoderDirection.FORWARD);
+        odo.resetPosAndIMU();
+
+        telemetry.addData("Odo status", "Initialized");
+        telemetry.addData("X offset", odo.getXOffset(DistanceUnit.MM));
+        telemetry.addData("Y offset", odo.getYOffset(DistanceUnit.MM));
+        telemetry.addData("Device Version Number:", odo.getDeviceVersion());
+        telemetry.addData("Heading Scalar", odo.getYawScalar());
+
+        //flywheel declarations
+        flyWheel = hardwareMap.get(DcMotorEx.class, "flywheel");
+        flyWheel.setDirection(DcMotor.Direction.FORWARD);
+        flyWheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+
+        //angle servo declarations
+        angle = hardwareMap.get(Servo.class, "angle");
+
         // Wait for the game to start (driver presses START)
         telemetry.addData("Status", "Initialized");
         telemetry.update();
 
         waitForStart();
-        runtime.reset();
+        runtime.reset(); //This is from the LinarOpMode
+        resetRuntime(); //Used for the odometry unit time-keeping
 
         // run until the end of the match (driver presses STOP)
         while (opModeIsActive()) {
+
+            odo.update();
+
+            double newTime = getRuntime();
+            double loopTime = newTime-oldTime;
+            double frequency = 1/loopTime;
+            oldTime = newTime;
+
+            Pose2D pos = odo.getPosition();
+            String data = String.format(Locale.US, "{X: %.3f, Y: %.3f, H: %.3f}", pos.getX(DistanceUnit.MM), pos.getY(DistanceUnit.MM), pos.getHeading(AngleUnit.DEGREES));
+            String velocity = String.format(Locale.US,"{XVel: %.3f, YVel: %.3f, HVel: %.3f}", odo.getVelX(DistanceUnit.MM), odo.getVelY(DistanceUnit.MM), odo.getHeadingVelocity(UnnormalizedAngleUnit.DEGREES));
+            telemetry.addData("Position", data);
+            telemetry.addData("Velocity", velocity);
+            telemetry.addData("Status", odo.getDeviceStatus());
+            telemetry.addData("Pinpoint Frequency", odo.getFrequency()); //prints/gets the current refresh rate of the Pinpoint
+            telemetry.addData("REV Hub Frequency: ", frequency); //prints the control system refresh rate
+
+
             double max;
 
             // POV Mode uses left joystick to go forward & strafe, and right joystick to rotate.
@@ -153,6 +216,16 @@ public class BasicOmniOpMode_Linear extends LinearOpMode {
             */
 
             // Send calculated power to wheels
+            if (gamepad1.left_bumper) {
+                frontLeftPower*=0.4;
+                frontRightPower*=0.4;
+                backLeftPower*=0.4;
+                backRightPower*=0.4;
+                telemetry.addData("Slow driving mode: ", true);
+            } else {
+                telemetry.addData("Fast driving mode: ", true);
+            }
+
             frontLeftDrive.setPower(frontLeftPower);
             frontRightDrive.setPower(frontRightPower);
             backLeftDrive.setPower(backLeftPower);
@@ -162,6 +235,49 @@ public class BasicOmniOpMode_Linear extends LinearOpMode {
             telemetry.addData("Status", "Run Time: " + runtime.toString());
             telemetry.addData("Front left/Right", "%4.2f, %4.2f", frontLeftPower, frontRightPower);
             telemetry.addData("Back  left/Right", "%4.2f, %4.2f", backLeftPower, backRightPower);
+
+            if (gamepad1.y && !yButtonPreviouslyPressed) {
+                flywheelOn = !flywheelOn;
+            }
+            yButtonPreviouslyPressed = gamepad1.y;
+
+            if (flywheelOn) {
+                flyWheel.setVelocity(BANG_BANG_TARGET_VELOCITY);
+            } else {
+                flyWheel.setVelocity(0);
+            }
+
+            telemetry.addData("Nominal flywheel RPM: ", (BANG_BANG_TARGET_VELOCITY / 28) * 60);
+            telemetry.addData("#1 Actual flywheel RPM: ", ((flyWheel.getVelocity()) / 28) * 60);
+            telemetry.addData("#1 voltage: ", flyWheel.getPower());
+            //TO-DO: Add a modifier onto the flywheel speed (increments of 0.002 I think)
+            //telemetry.addData("modifier value: ", modifier);
+
+            telemetry.addData("angleValue: ", angleValue);
+            telemetry.addData("Additional angle added: ", additionalAngle);
+            telemetry.addData("Final Servo Angle: ", angle.getPosition());
+
+            double currentX = 3621-pos.getY(DistanceUnit.MM);
+            double currentY = pos.getX(DistanceUnit.MM);
+            double currentH = pos.getHeading(AngleUnit.DEGREES);
+
+            if (gamepad1.back) {
+                turretTargetTicks=0;
+            } else {
+                turretTargetDeg = TurretMath.getTurretTargetAngle(currentX, currentY, currentH, basketX, basketY); // from your aiming function
+                turretTargetTicks = TurretMath.degreesToTicks(turretTargetDeg);
+            }
+
+            //turretTargetTicks=0;
+
+            flyWheelDirection.setPower(-1);
+            flyWheelDirection.setTargetPosition((int) turretTargetTicks);
+            flyWheelDirection.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+
+            BANG_BANG_TARGET_VELOCITY = modifier*TurretMath.getTurretSpeed(currentX, currentY, basketX, basketY);
+
+            angleValue = TurretMath.getServoAngle(currentX, currentY, basketX, basketY);
+
             telemetry.update();
         }
     }}
