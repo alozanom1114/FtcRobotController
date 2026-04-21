@@ -97,6 +97,15 @@ public class BasicOmniOpMode_Linear extends LinearOpMode {
     private Servo angle;
 
     private double turretTargetTicks;
+    private double turretTargetDeg;
+
+    private double basketX;
+    private double basketY;
+    private double resetX;
+    private double resetY;
+    private DcMotorEx flyWheelDirection;
+    private double smoothedTurretDeg;
+    private Servo blocker;
 
     @Override
     public void runOpMode() {
@@ -142,6 +151,33 @@ public class BasicOmniOpMode_Linear extends LinearOpMode {
 
         //angle servo declarations
         angle = hardwareMap.get(Servo.class, "angle");
+
+        //TO-DO: Make this take a simple button to switch sides before the match starts.
+        if (true) { //red
+            basketX=3300.00;
+            resetX=3396.00;
+        } else { //blue
+            basketX=300.00;
+            resetX=225.00;
+        }
+        basketY=3300.00;
+        resetY=220.00;
+
+        flyWheelDirection = hardwareMap.get(DcMotorEx.class, "flywheelDirection");
+        flyWheelDirection.setDirection(DcMotor.Direction.FORWARD);
+        flyWheelDirection.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+        flyWheelDirection.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
+        blocker = hardwareMap.get(Servo.class, "blocker");
+
+        intakeMotor = hardwareMap.get(DcMotor.class, "Intake");
+        intakeMotor.setDirection(DcMotor.Direction.FORWARD);
+        intakeMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+
+
+
+
+
 
         // Wait for the game to start (driver presses START)
         telemetry.addData("Status", "Initialized");
@@ -264,8 +300,8 @@ public class BasicOmniOpMode_Linear extends LinearOpMode {
             if (gamepad1.back) {
                 turretTargetTicks=0;
             } else {
-                turretTargetDeg = TurretMath.getTurretTargetAngle(currentX, currentY, currentH, basketX, basketY); // from your aiming function
-                turretTargetTicks = TurretMath.degreesToTicks(turretTargetDeg);
+                turretTargetDeg = getTurretTargetAngle(currentX, currentY, currentH, basketX, basketY); // from your aiming function
+                turretTargetTicks = degreesToTicks(turretTargetDeg);
             }
 
             //turretTargetTicks=0;
@@ -274,10 +310,150 @@ public class BasicOmniOpMode_Linear extends LinearOpMode {
             flyWheelDirection.setTargetPosition((int) turretTargetTicks);
             flyWheelDirection.setMode(DcMotor.RunMode.RUN_TO_POSITION);
 
-            BANG_BANG_TARGET_VELOCITY = modifier*TurretMath.getTurretSpeed(currentX, currentY, basketX, basketY);
+            //TO-DO: Add a modifier to be changed by the player
+            BANG_BANG_TARGET_VELOCITY = getTurretSpeed(currentX, currentY, basketX, basketY);
 
-            angleValue = TurretMath.getServoAngle(currentX, currentY, basketX, basketY);
+            angleValue = getServoAngle(currentX, currentY, basketX, basketY);
+
+            telemetry.addData("robot angle: ", currentH);
+            telemetry.addData("robot x: ", currentX);
+            telemetry.addData("robot y: ", currentY);
+            telemetry.addData("Turret correction angle: ", degreesToTicks(turretTargetDeg));
+            telemetry.addData("servo angle: ", getServoAngle(currentX, currentY, basketX, basketY));
+            telemetry.addData("shooter speed: ", getTurretSpeed(currentX, currentY, basketX, basketY)); //TO-DO: Add modifier
+            //telemetry.addData("modifier: ", modifier);//TO-DO: Add modifier
+
+            if (gamepad1.a) {
+                // -------------------------
+                // A PRESSED → SHOOT LOGIC
+                // -------------------------
+
+                // Open blocker
+                blocker.setPosition(0.0);
+
+                sleep(300);
+
+                // Intake ALWAYS spins while A is pressed
+                intakeMotor.setPower(1.0);
+
+                sleep (100);
+
+                if((bottomDistance <= 5 || frontDistance <= 5)) {
+                    // More than one ball → little helper stays down
+                    littleServo.setPosition(0.0);
+                } else if (topDistance <= 5) {
+                    // Only one ball → use little helper
+                    littleServo.setPosition(0.5);
+                    sleep(100);
+                } else {
+                    // No balls detected → use little helper
+                    littleServo.setPosition(0.5);
+                    sleep(100);
+                }
+
+                enteredElse = false;
+                waitingForBlocker = false;
+
+            }
 
             telemetry.update();
         }
-    }}
+    }
+
+    public static double getTurretTargetAngle(double robotX, double robotY, double robotHeadingDeg,
+                                              double basketX, double basketY) {
+
+        //final double TURRET_MIN_DEG = -125.0;
+        //final double TURRET_MAX_DEG = 225.0;
+
+        double deltaX = basketX - robotX;
+        double deltaY = basketY - robotY;
+
+        // Angle to basket in field coords (0° = forward, CW positive)
+        double targetAngleDeg = -Math.toDegrees(Math.atan2(deltaX, deltaY));
+
+        // Convert to robot-relative
+        double relativeAngle = targetAngleDeg - robotHeadingDeg;
+
+        // Normalize to [-180, 180)
+        relativeAngle = ((relativeAngle + 540) % 360) - 180;
+
+        // CCW limit = +135°, CW limit = -225° (continuous)
+        if (relativeAngle > 135.0) {
+            // Move around the CW side instead of stopping at 135
+            relativeAngle -= 360.0;  // e.g., 150 -> -210
+        } else if (relativeAngle < -225.0) {
+            // Wrap around the CCW side if below CW limit
+            relativeAngle += 360.0;  // e.g., -230 -> 130
+        }
+
+        return relativeAngle;
+    }
+
+    public static double getTurretSpeed(double robotX, double robotY,
+                                        double basketX, double basketY) {
+
+        double dx_m = (basketX - robotX) / 1000.0;   // horizontal planar distance, m
+        double dy_m = (basketY - robotY) / 1000.0;   // if you need 2D distance, see below
+        double R = Math.sqrt(dx_m*dx_m + dy_m*dy_m);   // radial distance in meters
+        double h_a = 1.190, h_s = 0.381, x_1 = R + 0.235, m_s = 0.8085, m_i = -1.0/m_s, a_g = -9.80665;
+
+        double theta_i = Math.atan((h_a - h_s - (x_1 * m_i)/(2))/((x_1)/(2)));
+        double u = Math.sqrt((a_g * x_1)/(Math.pow(Math.cos(theta_i), 2)*(m_i - Math.tan(theta_i))));
+
+        double ppr = 28.0, mew = 1.67, d_s = 0.1, theta_r = 1.2, pi = 3.14159265; // mew = 0.318
+
+        double v_t = (u * ppr)/(mew * d_s);
+        //double theta_a = (1.316 - theta_r * theta_i)/(2 * pi);
+
+        return -v_t;
+    }
+
+    public static double getServoAngle (double robotX, double robotY, double basketX, double basketY) {
+        double dx_m = (basketX - robotX) / 1000.0;   // horizontal planar distance, m
+        double dy_m = (basketY - robotY) / 1000.0;   // if you need 2D distance, see below
+        double R = Math.sqrt(dx_m*dx_m + dy_m*dy_m);   // radial distance in meters
+        double h_a = 1.190, h_s = 0.381, x_1 = R + 0.235, m_s = 0.8085, m_i = -1.0/m_s, a_g = -9.80665;
+
+        double theta_i = Math.atan((h_a - h_s - (x_1 * m_i)/(2))/((x_1)/(2)));
+        // convert chosen angle (radians) to physical degrees relative to horizon
+        double chosenAngleDeg = Math.toDegrees(theta_i); // e.g. 20.5 deg
+
+        double servoA = 0.85;    // servo position that yields angleA
+        double angleA = 78.0;    // degrees (relative to x-axis) at servoA
+        double servoB = 0.01;    // servo position that yields angleB
+        double angleB = 53.0;    // degrees (relative to x-axis) at servoB
+
+        // Inverse linear map
+        double servoPos = 0.85
+                + (((theta_i * (180 / Math.PI)) - 78)
+                * (0.01 - 0.85)
+                * (1.0 / (53 - 78)));
+
+        double minCalib = Math.min(servoA, servoB);
+        double maxCalib = Math.max(servoA, servoB);
+        servoPos = Math.max(minCalib, Math.min(maxCalib, servoPos));
+
+        // Also enforce the global servo range [0.0, 1.0]
+        servoPos = Math.max(0.0, Math.min(1.0, servoPos));
+
+        // Optional trim
+        double trim = 0.0;            // change to small value like 0.01 if needed
+        servoPos = Math.max(0.0, Math.min(1.0, servoPos + trim));
+
+        return servoPos;
+    }
+
+    public static final double TICKS_PER_REV = 384.5;
+    public static final double GEAR_RATIO = 5.263; // motor:turret
+    public static final double TICKS_PER_DEGREE = (TICKS_PER_REV * GEAR_RATIO) / 360.0;
+
+    public static double degreesToTicks(double degrees) {
+        // Convert to encoder ticks
+        return degrees * TICKS_PER_DEGREE;
+    }
+
+    public static double ticksToDegrees(double ticks) {
+        return ticks / TICKS_PER_DEGREE;
+    }
+}
