@@ -107,6 +107,11 @@ public class BasicOmniOpMode_Linear extends LinearOpMode {
     private double smoothedTurretDeg;
     private Servo blocker;
 
+    private DcMotor intakeMotor;
+
+    public static final double OFFSET_X = 5.5;
+    public static final double OFFSET_Y = -137;
+
     @Override
     public void runOpMode() {
 
@@ -338,6 +343,7 @@ public class BasicOmniOpMode_Linear extends LinearOpMode {
 
                 sleep (100);
 
+                /* TO-DO: Integrate the distance sensors into the shooting code
                 if((bottomDistance <= 5 || frontDistance <= 5)) {
                     // More than one ball → little helper stays down
                     littleServo.setPosition(0.0);
@@ -354,6 +360,99 @@ public class BasicOmniOpMode_Linear extends LinearOpMode {
                 enteredElse = false;
                 waitingForBlocker = false;
 
+                 */
+
+            } else {
+                // -------------------------
+                // A NOT PRESSED → NORMAL LOGIC
+                // -------------------------
+
+                /*
+                // Detect FIRST FRAME entering this else
+                if (!enteredElse) {
+                    littleServo.setPosition(0.50);
+                    servoStartTime = System.currentTimeMillis();
+                    waitingForBlocker = true;
+                    enteredElse = true;
+                }
+
+                // Non-blocking delay
+                if (waitingForBlocker &&
+                        System.currentTimeMillis() - servoStartTime >= 500) {
+
+                    blocker.setPosition(0.25);
+                    waitingForBlocker = false;
+                }
+
+                 */
+
+                blocker.setPosition(0.25); //Servo line from the commented out things above
+
+                // Intake control
+                if (gamepad1.left_trigger != 0 && !gamepad1.right_bumper) {
+                    intakeMotor.setPower(gamepad1.left_trigger);
+                } else if (gamepad1.left_trigger != 0 && gamepad1.right_bumper) {
+                    intakeMotor.setPower(-gamepad1.left_trigger*0.75);
+                } else {
+                    intakeMotor.setPower(0);
+                }
+            }
+
+            /*
+            telemetry.addData("bottomDistance: ", bottomDistance);
+            telemetry.addData("sideDistance1: ", sideDistance1);
+            telemetry.addData("front distance: ", frontDistance);
+            telemetry.addData("top distance: ", topDistance);
+
+             */
+
+            if (gamepad1.dpad_right) {
+                angleValue += 0.01;
+                //additionalAngle+=0.01;
+                sleep(5);
+            } else if (gamepad1.dpad_left) {
+                angleValue -= 0.01;
+                //additionalAngle-=0.01;
+                sleep(5);
+            }
+
+            if (gamepad1.b) {
+                odo.setOffsets(OFFSET_X, OFFSET_Y, DistanceUnit.MM);
+                odo.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
+                odo.setEncoderDirections(GoBildaPinpointDriver.EncoderDirection.FORWARD, GoBildaPinpointDriver.EncoderDirection.FORWARD);
+                odo.setHeading(0, AngleUnit.DEGREES);
+                odo.setPosX(resetY, DistanceUnit.MM);
+                odo.setPosY(resetX, DistanceUnit.MM);
+            }
+
+            if (gamepad1.x) {
+                BANG_BANG_TARGET_VELOCITY=-BANG_BANG_TARGET_VELOCITY;
+            } else {
+                BANG_BANG_TARGET_VELOCITY=BANG_BANG_TARGET_VELOCITY;
+            }
+
+            angle.setPosition(angleValue + additionalAngle);
+            odo.update();
+
+            telemetry.addData("DeviceStatus", odo.getDeviceStatus());
+            telemetry.addData("Enc X raw", odo.getEncoderX());   // raw counts
+            telemetry.addData("Enc Y raw", odo.getEncoderY());
+            telemetry.addData("Pos X (mm)", String.format(Locale.US, "%.3f", odo.getPosition().getX(DistanceUnit.MM)));
+            telemetry.addData("Pos Y (mm)", String.format(Locale.US, "%.3f", odo.getPosition().getY(DistanceUnit.MM)));
+            telemetry.addData("Vel X (mm/s)", String.format(Locale.US, "%.3f", odo.getVelX(DistanceUnit.MM)));
+            telemetry.addData("Vel Y (mm/s)", String.format(Locale.US, "%.3f", odo.getVelY(DistanceUnit.MM)));
+            telemetry.addData("Heading (deg)", String.format(Locale.US, "%.3f", odo.getPosition().getHeading(AngleUnit.DEGREES)));
+
+            if (gamepad1.right_trigger>=0.5) {
+                frontRightDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+                frontLeftDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+                backRightDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+                backLeftDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+            } else {
+                frontRightDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+                frontLeftDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+                backRightDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+                backLeftDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
             }
 
             telemetry.update();
