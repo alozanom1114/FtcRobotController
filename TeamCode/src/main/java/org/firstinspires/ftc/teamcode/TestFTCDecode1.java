@@ -29,11 +29,11 @@
 
 package org.firstinspires.ftc.teamcode;
 
-import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
@@ -74,7 +74,7 @@ import java.util.Locale;
 
 @TeleOp(name="Basic: Omni Linear OpMode", group="Linear OpMode")
 //@Disabled
-public class BasicOmniOpMode_Linear extends LinearOpMode {
+public class TestFTCDecode1 extends LinearOpMode {
 
     // Declare OpMode members for each of the 4 motors.
     private ElapsedTime runtime = new ElapsedTime();
@@ -117,10 +117,10 @@ public class BasicOmniOpMode_Linear extends LinearOpMode {
 
         // Initialize the hardware variables. Note that the strings used here must correspond
         // to the names assigned during the robot configuration step on the DS or RC devices.
-        frontLeftDrive = hardwareMap.get(DcMotor.class, "front_left_drive");
-        backLeftDrive = hardwareMap.get(DcMotor.class, "back_left_drive");
-        frontRightDrive = hardwareMap.get(DcMotor.class, "front_right_drive");
-        backRightDrive = hardwareMap.get(DcMotor.class, "back_right_drive");
+        frontLeftDrive = hardwareMap.get(DcMotor.class, "leftfront_drive");
+        backLeftDrive = hardwareMap.get(DcMotor.class, "leftback_drive");
+        frontRightDrive = hardwareMap.get(DcMotor.class, "rightfront_drive");
+        backRightDrive = hardwareMap.get(DcMotor.class, "rightback_drive");
 
         // ########################################################################################
         // !!!            IMPORTANT Drive Information. Test your motor directions.            !!!!!
@@ -176,7 +176,7 @@ public class BasicOmniOpMode_Linear extends LinearOpMode {
         blocker = hardwareMap.get(Servo.class, "blocker");
 
         intakeMotor = hardwareMap.get(DcMotor.class, "Intake");
-        intakeMotor.setDirection(DcMotor.Direction.FORWARD);
+        intakeMotor.setDirection(DcMotor.Direction.REVERSE);
         intakeMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
 
 
@@ -431,7 +431,7 @@ public class BasicOmniOpMode_Linear extends LinearOpMode {
                 BANG_BANG_TARGET_VELOCITY=BANG_BANG_TARGET_VELOCITY;
             }
 
-            angle.setPosition(angleValue + additionalAngle);
+            //angle.setPosition(angleValue + additionalAngle);
             odo.update();
 
             telemetry.addData("DeviceStatus", odo.getDeviceStatus());
