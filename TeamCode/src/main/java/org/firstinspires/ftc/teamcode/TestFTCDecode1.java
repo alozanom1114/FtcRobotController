@@ -72,11 +72,11 @@ import java.util.Locale;
  * Remove or comment out the @Disabled line to add this OpMode to the Driver Station OpMode list
  */
 
-@TeleOp(name="Basic: Omni Linear OpMode", group="Linear OpMode")
+@TeleOp(name="TestFTCDecode1", group="Linear OpMode")
 //@Disabled
 public class TestFTCDecode1 extends LinearOpMode {
 
-    // Declare OpMode members for each of the 4 motors.
+    // Declare OpMode members for each of the d4 motors.
     private ElapsedTime runtime = new ElapsedTime();
     private DcMotor frontLeftDrive = null;
     private DcMotor backLeftDrive = null;
@@ -138,7 +138,7 @@ public class TestFTCDecode1 extends LinearOpMode {
         backRightDrive.setDirection(DcMotor.Direction.FORWARD);
 
         odo = hardwareMap.get(GoBildaPinpointDriver.class,"odo");
-        odo.setOffsets(5.5, -137, DistanceUnit.MM);
+        odo.setOffsets(OFFSET_X, OFFSET_Y, DistanceUnit.MM);
         odo.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
         odo.setEncoderDirections(GoBildaPinpointDriver.EncoderDirection.FORWARD, GoBildaPinpointDriver.EncoderDirection.FORWARD);
         odo.resetPosAndIMU();
@@ -158,6 +158,7 @@ public class TestFTCDecode1 extends LinearOpMode {
         angle = hardwareMap.get(Servo.class, "angle");
 
         //TO-DO: Make this take a simple button to switch sides before the match starts.
+        //TO-DO: Convert to FIELD COORDINATE SYSTEM
         if (true) { //red
             basketX=3300.00;
             resetX=3396.00;
